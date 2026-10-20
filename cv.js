@@ -6,7 +6,7 @@ export const collectionFields = {
 
 export const profileFields = ["name", "headline", "location", "email", "website", "summary"];
 
-export function validateCV(value) {
+export function validateCV(value, { allowEmptyName = false } = {}) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("CV data must be a JSON object.");
   }
@@ -18,7 +18,7 @@ export function validateCV(value) {
     return item;
   };
   for (const field of profileFields) result[field] = text(value[field]);
-  if (!result.name.trim()) throw new Error("A name is required.");
+  if (!allowEmptyName && !result.name.trim()) throw new Error("A name is required.");
   if (!Array.isArray(value.skills) || value.skills.length > 100) {
     throw new Error("Skills must be an array of up to 100 text entries.");
   }

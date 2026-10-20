@@ -26,6 +26,13 @@ test("validation copies known fields and fills optional entry fields", () => {
   assert.deepEqual(sample.skills, []);
 });
 
+test("local drafts can preserve a temporarily empty name without allowing incomplete exports", () => {
+  const incomplete = { ...sample, name: "", summary: "An edit worth keeping" };
+  assert.deepEqual(validateCV(incomplete, { allowEmptyName: true }), incomplete);
+  assert.throws(() => validateCV(incomplete), /name is required/);
+  assert.throws(() => validateCV({ ...incomplete, skills: null }, { allowEmptyName: true }));
+});
+
 test("only absolute HTTP(S) project and profile links are clickable", () => {
   for (const value of ["javascript:alert(1)", "data:text/html,hi", "/relative", "//example.com", "invalid", "file:///tmp/file"]) {
     assert.equal(safeURL(value), null);

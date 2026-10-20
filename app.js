@@ -139,8 +139,8 @@ function renderEditor() {
   }
 }
 
-function persist() {
-  const snapshot = validateCV(cv);
+function persist(options) {
+  const snapshot = validateCV(cv, options);
   try {
     localStorage.setItem(LOCAL_KEY, JSON.stringify(snapshot));
     $("local-status").textContent = "Saved in this browser. Not yet published to the website.";
@@ -155,7 +155,11 @@ function changed() {
   clearTimeout(backupTimer);
   backupTimer = null;
   try {
-    const snapshot = persist();
+    const snapshot = persist({ allowEmptyName: true });
+    if (!snapshot.name.trim()) {
+      $("local-status").textContent += " Enter a name before JSON export or Drive backup.";
+      return;
+    }
     if (drive.token) {
       $("drive-status").textContent = "Changes saved locally. Waiting to back up…";
       backupTimer = setTimeout(() => {
@@ -273,6 +277,7 @@ $("reset").addEventListener("click", () => {
   renderEditor();
 });
 $("connect").addEventListener("click", async () => {
+  const requestSession = session;
   const clientId = $("client-id").value.trim();
   if (!clientId.endsWith(".apps.googleusercontent.com")) {
     $("drive-status").textContent = "Enter your Google web application OAuth client ID. See the README for setup.";
@@ -282,10 +287,15 @@ $("connect").addEventListener("click", async () => {
   $("drive-status").textContent = "Opening Google sign-in…";
   try {
     await loadGoogle();
+    if (requestSession !== session) return;
     const client = google.accounts.oauth2.initTokenClient({
       client_id: clientId,
       scope: DRIVE_SCOPE,
       callback: (response) => {
+        if (requestSession !== session) {
+          if (response.access_token) google.accounts.oauth2.revoke(response.access_token, () => {});
+          return;
+        }
         $("connect").disabled = false;
         if (response.error || !response.access_token || !google.accounts.oauth2.hasGrantedAllScopes(response, DRIVE_SCOPE)) {
           $("drive-status").textContent = "Drive access was not granted. Local saving still works.";
@@ -298,12 +308,14 @@ $("connect").addEventListener("click", async () => {
         if (pending.length) flush();
       },
       error_callback: () => {
+        if (requestSession !== session) return;
         $("connect").disabled = false;
         $("drive-status").textContent = "Sign-in was closed or blocked. Allow the popup and try again.";
       },
     });
     client.requestAccessToken();
   } catch (error) {
+    if (requestSession !== session) return;
     $("connect").disabled = false;
     $("drive-status").textContent = error.message;
   }
@@ -348,6 +360,7 @@ $("disconnect").addEventListener("click", () => {
   pending = [];
   const token = drive.token;
   drive.disconnect();
+  $("connect").disabled = false;
   if (token && globalThis.google?.accounts?.oauth2) google.accounts.oauth2.revoke(token, () => {});
   updateDriveButtons();
   $("drive-status").textContent = "Disconnected. Changes will only be saved in this browser.";
@@ -358,7 +371,7 @@ async function init() {
   let storageMessage = "";
   try {
     const saved = localStorage.getItem(LOCAL_KEY);
-    if (saved) draft = validateCV(JSON.parse(saved));
+    if (saved) draft = validateCV(JSON.parse(saved), { allowEmptyName: true });
     $("client-id").value = localStorage.getItem(CLIENT_KEY) || "";
   } catch {
     storageMessage = "Could not read your saved draft. Browser storage may be unavailable or the draft invalid.";
